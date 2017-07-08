@@ -135,7 +135,7 @@ import UIKit
     }
     
     private func setup() {
-        backgroundColor = .red
+        backgroundColor = .white
         
         webView.frame = bounds
         webView.delegate = self
@@ -143,7 +143,11 @@ import UIKit
         webView.scalesPageToFit = false
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         webView.dataDetectorTypes = UIDataDetectorTypes()
-        webView.backgroundColor = .white
+
+        // These to are a fix for a bug where UIWebView would display a black line at the bottom of the view.
+        // https://stackoverflow.com/questions/21420137/black-line-appearing-at-bottom-of-uiwebview-how-to-remove
+        webView.backgroundColor = .clear
+        webView.isOpaque = false
         
         webView.scrollView.isScrollEnabled = isScrollEnabled
         webView.scrollView.bounces = false
