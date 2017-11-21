@@ -116,7 +116,7 @@ import UIKit
     /// The inner height of the editor div.
     /// Fetches it from JS every time, so might be slow!
     private var clientHeight: Int {
-        let heightString = runJS("document.getElementById('editor').clientHeight;")
+        let heightString = runJS("document.body.scrollHeight;")
         return Int(heightString) ?? 0
     }
 
