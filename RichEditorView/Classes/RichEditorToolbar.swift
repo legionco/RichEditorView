@@ -125,6 +125,7 @@ import UIKit
 
             if let image = option.image {
                 let button = RichBarButtonItem(image: image, handler: handler)
+                button.width = image.size.width
                 buttons.append(button)
             } else {
                 let title = option.title
@@ -134,13 +135,16 @@ import UIKit
         }
         toolbar.items = buttons
 
-        let defaultIconWidth: CGFloat = 22
-        let barButtonItemMargin: CGFloat = 11
+        let minIconWidth: CGFloat = 50
+        let barButtonItemMargin: CGFloat = 3
         let width: CGFloat = buttons.reduce(0) {sofar, new in
-            if let view = new.value(forKey: "view") as? UIView {
+            if new.width > 0 {
+                let itemWidth: CGFloat = max(minIconWidth, new.width)
+                return sofar + (itemWidth + barButtonItemMargin)
+            } else if let view = new.value(forKey: "view") as? UIView {
                 return sofar + view.frame.size.width + barButtonItemMargin
             } else {
-                return sofar + (defaultIconWidth + barButtonItemMargin)
+                return sofar + (minIconWidth + barButtonItemMargin)
             }
         }
         
