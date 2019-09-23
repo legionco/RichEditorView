@@ -229,6 +229,8 @@ RE.setLineHeight = function(height) {
 
 RE.insertImage = function(url, alt) {
     var img = document.createElement('img');
+    img.setAttribute("width", "150");
+    img.setAttribute("height", "150");
     img.setAttribute("src", url);
     img.setAttribute("alt", alt);
     img.onload = RE.updateHeight;

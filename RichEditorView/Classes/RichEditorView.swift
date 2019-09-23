@@ -6,6 +6,7 @@
 //
 
 import UIKit
+import WebKit
 
 /// RichEditorDelegate defines callbacks for the delegate of the RichEditorView
 @objc public protocol RichEditorDelegate: class {
@@ -47,12 +48,13 @@ import UIKit
     /// Input accessory view to display over they keyboard.
     /// Defaults to nil
     open override var inputAccessoryView: UIView? {
-        get { return webView.cjw_inputAccessoryView }
-        set { webView.cjw_inputAccessoryView = newValue }
+        get { return webView.accessoryView }
+        set {webView.accessoryView = newValue}
+
     }
 
     /// The internal UIWebView that is used to display the text.
-    open private(set) var webView: UIWebView
+    open private(set) var webView: RichEditorWebView
 
     /// Whether or not scroll is enabled on the view.
     open var isScrollEnabled: Bool = true {
@@ -87,17 +89,21 @@ import UIKit
     private var innerLineHeight: Int = 28
 
     /// The line height of the editor. Defaults to 28.
-    open private(set) var lineHeight: Int {
-        get {
-            if isEditorLoaded, let lineHeight = Int(runJS("RE.getLineHeight();")) {
-                return lineHeight
-            } else {
-                return innerLineHeight
-            }
-        }
-        set {
-            innerLineHeight = newValue
+    open private(set) var lineHeight: Int = 0 {
+        didSet {
+            innerLineHeight = lineHeight
             runJS("RE.setLineHeight('\(innerLineHeight)px');")
+        }
+    }
+    
+    func getLineHeight(onCompletion:@escaping((Int, Error?)-> Void)) {
+        guard isEditorLoaded == true else {return onCompletion(innerLineHeight , nil)}
+        runJSX("RE.getLineHeight();") { (lineHeight, error) in
+            guard error == nil else {
+                onCompletion( 0 , error)
+                return
+            }
+            onCompletion(Int(lineHeight) ?? 0 , nil)
         }
     }
 
@@ -115,21 +121,40 @@ import UIKit
 
     /// The inner height of the editor div.
     /// Fetches it from JS every time, so might be slow!
-    private var clientHeight: Int {
-        let heightString = runJS("document.body.scrollHeight;")
-        return Int(heightString) ?? 0
+    func getClientHeight(onCompletion:@escaping((Int, Error?)-> Void)) {
+        runJSX("document.body.scrollHeight;") { (height, error) in
+            guard error == nil else {
+                onCompletion( 0 , error)
+                return
+            }
+            onCompletion(Int(height) ?? 0 , nil)
+        }
     }
+
 
     // MARK: Initialization
     
     public override init(frame: CGRect) {
-        webView = UIWebView()
+        webView = RichEditorWebView()
         super.init(frame: frame)
         setup()
     }
 
     required public init?(coder aDecoder: NSCoder) {
-        webView = UIWebView()
+        // The Javascript source need to be injected at initialization with the initial configuration
+        let webConfig = WKWebViewConfiguration()
+        if let filePath = Bundle(for: RichEditorView.self).path(forResource: "rich_editor", ofType: "js"),
+            let scriptContent = try? String(contentsOfFile: filePath, encoding: String.Encoding.utf8) {
+            webConfig.userContentController.addUserScript(
+                WKUserScript(source: scriptContent,
+                             injectionTime: .atDocumentEnd,
+                             forMainFrameOnly: false
+                )
+            )
+        }
+        webView = RichEditorWebView(frame: CGRect.zero, configuration: webConfig)
+
+       
         super.init(coder: aDecoder)
         setup()
     }
@@ -138,11 +163,11 @@ import UIKit
         backgroundColor = .white
         
         webView.frame = bounds
-        webView.delegate = self
-        webView.keyboardDisplayRequiresUserAction = false
-        webView.scalesPageToFit = false
+        webView.navigationDelegate = self
+        //webView.keyboardDisplayRequiresUserAction = false
+        //webView.scalesPageToFit = false
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        webView.dataDetectorTypes = UIDataDetectorTypes()
+        //webView.dataDetectorTypes = UIDataDetectorTypes()
 
         // These to are a fix for a bug where UIWebView would display a black line at the bottom of the view.
         // https://stackoverflow.com/questions/21420137/black-line-appearing-at-bottom-of-uiwebview-how-to-remove
@@ -154,14 +179,18 @@ import UIKit
         webView.scrollView.delegate = self
         webView.scrollView.clipsToBounds = false
         
-        webView.cjw_inputAccessoryView = nil
+        
         
         self.addSubview(webView)
         
         if let filePath = Bundle(for: RichEditorView.self).path(forResource: "rich_editor", ofType: "html") {
             let url = URL(fileURLWithPath: filePath, isDirectory: false)
             let request = URLRequest(url: url)
-            webView.loadRequest(request)
+            if #available(iOS 9.0, *) {
+                webView.loadFileURL(url, allowingReadAccessTo: URL(fileURLWithPath: Bundle.main.bundleURL.absoluteString))
+            } else {
+                // Fallback on earlier versions
+            }
         }
 
         tapRecognizer.addTarget(self, action: #selector(viewWasTapped))
@@ -175,16 +204,24 @@ import UIKit
 
     /// The HTML that is currently loaded in the editor view, if it is loaded. If it has not been loaded yet, it is the
     /// HTML that will be loaded into the editor view once it finishes initializing.
-    public var html: String {
-        get {
-            return runJS("RE.getHtml();")
-        }
-        set {
-            contentHTML = newValue
+    public var html: String = String() {
+        didSet {
+            contentHTML = html
             if isEditorLoaded {
-                runJS("RE.setHtml('\(newValue.escaped)');")
-                updateHeight()
+                runJSX("RE.setHtml('\(html.escaped)');") { (response: String, error: Error?) in
+                    self.updateHeight()
+                }
             }
+        }
+    }
+    
+    func getHtml(onCompletion:@escaping((String, Error?)-> Void)) {
+        runJSX("RE.getHtml();") { (response:String, error: Error?) in
+            guard error == nil else {
+                onCompletion(String(), error)
+                return
+            }
+            onCompletion(response, nil)
         }
     }
 
@@ -348,8 +385,22 @@ import UIKit
     /// - returns: The result of the JavaScript that was run
     @discardableResult
     public func runJS(_ js: String) -> String {
-        let string = webView.stringByEvaluatingJavaScript(from: js) ?? ""
-        return string
+        webView.evaluateJavaScript(js) {  (response: Any?, error: Error?) in
+            if let e = error {
+                print(e)
+            }
+        }
+        return String()
+    }
+
+    public func runJSX(_ js: String, onCompletion: @escaping (String, Error?) -> Void) {
+        webView.evaluateJavaScript(js, completionHandler: { (response: Any?, error: Error?) in
+            if let stringResponse = response as? String {
+                onCompletion(stringResponse, error)
+            } else {
+                onCompletion(String(), error)
+            }
+        })
     }
 
 
@@ -447,10 +498,12 @@ import UIKit
     }
 
     private func updateHeight() {
-        let heightString = runJS("document.getElementById('editor').clientHeight;")
-        let height = Int(heightString) ?? 0
-        if editorHeight != height {
-            editorHeight = height
+        runJSX("document.getElementById('editor').clientHeight;") { (heightString, error: Error?) in
+            guard error == nil else {return}
+            let height = Int(heightString) ?? 0
+            if self.editorHeight != height {
+                self.editorHeight = height
+            }
         }
     }
 
@@ -459,36 +512,43 @@ import UIKit
     /// Works only if the `lineHeight` of the editor is available.
     private func scrollCaretToVisible() {
         let scrollView = self.webView.scrollView
-        
-        let contentHeight = clientHeight > 0 ? CGFloat(clientHeight) : scrollView.frame.height
-        scrollView.contentSize = CGSize(width: scrollView.frame.width, height: contentHeight)
-        
-        // XXX: Maybe find a better way to get the cursor height
-        let lineHeight = CGFloat(self.lineHeight)
-        let cursorHeight = lineHeight - 4
-        let visiblePosition = CGFloat(relativeCaretYPosition)
-        var offset: CGPoint?
-
-        if visiblePosition + cursorHeight > scrollView.bounds.size.height {
-            // Visible caret position goes further than our bounds
-            offset = CGPoint(x: 0, y: (visiblePosition + lineHeight) - scrollView.bounds.height + scrollView.contentOffset.y)
-
-        } else if visiblePosition < 0 {
-            // Visible caret position is above what is currently visible
-            var amount = scrollView.contentOffset.y + visiblePosition
-            amount = amount < 0 ? 0 : amount
-            offset = CGPoint(x: scrollView.contentOffset.x, y: amount)
-
+        self.getClientHeight { (clientHeight, error: Error?) in
+            guard error == nil else {return}
+            let contentHeight = clientHeight > 0 ? CGFloat(clientHeight) : scrollView.frame.height
+            scrollView.contentSize = CGSize(width: scrollView.frame.width, height: contentHeight)
+            
+            // XXX: Maybe find a better way to get the cursor height
+            self.getLineHeight(onCompletion: { (_lineHeight: Int, error: Error?) in
+                guard error == nil else {return}
+                let lineHeight = CGFloat(_lineHeight)
+                let cursorHeight = lineHeight - 4
+                let visiblePosition = CGFloat(self.relativeCaretYPosition)
+                var offset: CGPoint?
+                
+                if visiblePosition + cursorHeight > scrollView.bounds.size.height {
+                    // Visible caret position goes further than our bounds
+                    offset = CGPoint(x: 0, y: (visiblePosition + lineHeight) - scrollView.bounds.height + scrollView.contentOffset.y)
+                    
+                } else if visiblePosition < 0 {
+                    // Visible caret position is above what is currently visible
+                    var amount = scrollView.contentOffset.y + visiblePosition
+                    amount = amount < 0 ? 0 : amount
+                    offset = CGPoint(x: scrollView.contentOffset.x, y: amount)
+                    
+                }
+                
+                if let offset = offset {
+                    scrollView.setContentOffset(offset, animated: true)
+                }
+            })
+            
         }
-
-        if let offset = offset {
-            scrollView.setContentOffset(offset, animated: true)
-        }
+        
     }
     
     /// Called when actions are received from JavaScript
     /// - parameter method: String with the name of the method and optional parameters that were passed in
-    private func performCommand(_ method: String) {
+    func performCommand(_ method: String) {
         if method.hasPrefix("ready") {
             // If loading for the first time, we have to set the content HTML to be displayed
             if !isEditorLoaded {
@@ -497,15 +557,21 @@ import UIKit
                 isContentEditable = editingEnabledVar
                 placeholder = placeholderText
                 lineHeight = innerLineHeight
-                delegate?.richEditorDidLoad?(self)
+                delegate?.richEditorDidLoad?(self) //////-> TODO: Test if required to add inside the responseClosure
             }
             updateHeight()
         }
         else if method.hasPrefix("input") {
             scrollCaretToVisible()
-            let content = runJS("RE.getHtml()")
-            contentHTML = content
-            updateHeight()
+            self.getHtml { [weak self] (html, error) in
+                
+                guard error == nil else {return}
+                guard let sSelf = self else {return}
+                let content = html
+                sSelf.contentHTML = content
+                sSelf.updateHeight()
+            }
+           
         }
         else if method.hasPrefix("updateHeight") {
             updateHeight()
@@ -517,15 +583,19 @@ import UIKit
             delegate?.richEditorLostFocus?(self)
         }
         else if method.hasPrefix("action/") {
-            let content = runJS("RE.getHtml()")
-            contentHTML = content
-            
-            // If there are any custom actions being called
-            // We need to tell the delegate about it
-            let actionPrefix = "action/"
-            let range = method.range(of: actionPrefix)!
-            let action = method.replacingCharacters(in: range, with: "")
-            delegate?.richEditor?(self, handle: action)
+            self.getHtml { (html, error) in
+                guard error == nil else {return}
+                let content = html
+                self.contentHTML = content
+                
+                // If there are any custom actions being called
+                // We need to tell the delegate about it
+                let actionPrefix = "action/"
+                let range = method.range(of: actionPrefix)!
+                let action = method.replacingCharacters(in: range, with: "")
+                self.delegate?.richEditor?(self, handle: action)
+            }
+           
         }
     }
 
@@ -539,3 +609,69 @@ import UIKit
     }
     
 }
+
+/**
+ This is the new delegate
+ */
+extension RichEditorView: WKNavigationDelegate {
+    public func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        let callbackPrefix = "re-callback://"
+        if navigationAction.request.url?.absoluteString.hasPrefix(callbackPrefix) == true {
+            
+            // When we get a callback, we need to fetch the command queue to run the commands
+            // It comes in as a JSON array of commands that we need to parse
+            //let commands = runJS("RE.getCommandQueue();")
+            runJSX("RE.getCommandQueue();") { [weak self] (commands: String, error: Error?) in
+                guard let sSelf = self else {return}
+                guard error == nil else {
+                    decisionHandler(.cancel)
+                    return
+                    
+                }
+                if let data = commands.data(using: .utf8) {
+                    
+                    let jsonCommands: [String]
+                    do {
+                        jsonCommands = try JSONSerialization.jsonObject(with: data) as? [String] ?? []
+                    } catch {
+                        jsonCommands = []
+                        NSLog("RichEditorView: Failed to parse JSON Commands")
+                    }
+                    
+                    jsonCommands.forEach(sSelf.performCommand)
+                }
+                
+            }
+            decisionHandler(.cancel)
+            return
+            
+        }
+        // User is tapping on a link, so we should react accordingly
+        if navigationAction.navigationType == .linkActivated ||
+            navigationAction.navigationType == .backForward {
+            decisionHandler(.allow)
+            if let url = navigationAction.request.url,
+                let shouldInteract = delegate?.richEditor?(self, shouldInteractWith: url)
+            {                
+                return
+            }
+        }
+        decisionHandler(.allow)
+    }
+
+}
+
+
+/*
+ Overwriting the WKWebView for modifying the inputAccessoryView
+ */
+public class RichEditorWebView: WKWebView {
+    
+    public var accessoryView: UIView?
+    
+    public override var inputAccessoryView: UIView? {
+        return accessoryView
+    }
+    
+}
+
