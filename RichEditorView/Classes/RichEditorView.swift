@@ -10,14 +10,14 @@ import WebKit
 
 /// RichEditorDelegate defines callbacks for the delegate of the RichEditorView
 @objc public protocol RichEditorDelegate: class {
-
+    
     /// Called when the inner height of the text being displayed changes
     /// Can be used to update the UI
     @objc optional func richEditor(_ editor: RichEditorView, heightDidChange height: Int)
-
+    
     /// Called whenever the content inside the view changes
     @objc optional func richEditor(_ editor: RichEditorView, contentDidChange content: String)
-
+    
     /// Called when the rich editor starts editing
     @objc optional func richEditorTookFocus(_ editor: RichEditorView)
     
@@ -39,36 +39,36 @@ import WebKit
 
 /// RichEditorView is a UIView that displays richly styled text, and allows it to be edited in a WYSIWYG fashion.
 @objcMembers open class RichEditorView: UIView, UIScrollViewDelegate, UIWebViewDelegate, UIGestureRecognizerDelegate {
-
+    
     // MARK: Public Properties
-
+    
     /// The delegate that will receive callbacks when certain actions are completed.
     open weak var delegate: RichEditorDelegate?
-
+    
     /// Input accessory view to display over they keyboard.
     /// Defaults to nil
     open override var inputAccessoryView: UIView? {
         get { return webView.accessoryView }
         set {webView.accessoryView = newValue}
-
+        
     }
-
+    
     /// The internal UIWebView that is used to display the text.
     open private(set) var webView: RichEditorWebView
-
+    
     /// Whether or not scroll is enabled on the view.
     open var isScrollEnabled: Bool = true {
         didSet {
             webView.scrollView.isScrollEnabled = isScrollEnabled
         }
     }
-
+    
     /// Whether or not to allow user input in the view.
     open var isEditingEnabled: Bool {
         get { return isContentEditable }
         set { isContentEditable = newValue }
     }
-
+    
     /// The content HTML of the text being displayed.
     /// Is continually updated as the text is being edited.
     open private(set) var contentHTML: String = "" {
@@ -76,7 +76,7 @@ import WebKit
             delegate?.richEditor?(self, contentDidChange: contentHTML)
         }
     }
-
+    
     /// The internal height of the text being displayed.
     /// Is continually being updated as the text is edited.
     open private(set) var editorHeight: Int = 0 {
@@ -84,10 +84,10 @@ import WebKit
             delegate?.richEditor?(self, heightDidChange: editorHeight)
         }
     }
-
+    
     /// The value we hold in order to be able to set the line height before the JS completely loads.
     private var innerLineHeight: Int = 28
-
+    
     /// The line height of the editor. Defaults to 28.
     open private(set) var lineHeight: Int = 0 {
         didSet {
@@ -106,19 +106,19 @@ import WebKit
             onCompletion(Int(lineHeight) ?? 0 , nil)
         }
     }
-
+    
     // MARK: Private Properties
-
+    
     /// Whether or not the editor has finished loading or not yet.
     private var isEditorLoaded = false
-
+    
     /// Value that stores whether or not the content should be editable when the editor is loaded.
     /// Is basically `isEditingEnabled` before the editor is loaded.
     private var editingEnabledVar = true
-
+    
     /// The private internal tap gesture recognizer used to detect taps and focus the editor
     private let tapRecognizer = UITapGestureRecognizer()
-
+    
     /// The inner height of the editor div.
     /// Fetches it from JS every time, so might be slow!
     func getClientHeight(onCompletion:@escaping((Int, Error?)-> Void)) {
@@ -130,8 +130,8 @@ import WebKit
             onCompletion(Int(height) ?? 0 , nil)
         }
     }
-
-
+    
+    
     // MARK: Initialization
     
     public override init(frame: CGRect) {
@@ -139,7 +139,7 @@ import WebKit
         super.init(frame: frame)
         setup()
     }
-
+    
     required public init?(coder aDecoder: NSCoder) {
         // The Javascript source need to be injected at initialization with the initial configuration
         let webConfig = WKWebViewConfiguration()
@@ -153,8 +153,8 @@ import WebKit
             )
         }
         webView = RichEditorWebView(frame: CGRect.zero, configuration: webConfig)
-
-       
+        
+        
         super.init(coder: aDecoder)
         setup()
     }
@@ -168,7 +168,7 @@ import WebKit
         //webView.scalesPageToFit = false
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         //webView.dataDetectorTypes = UIDataDetectorTypes()
-
+        
         // These to are a fix for a bug where UIWebView would display a black line at the bottom of the view.
         // https://stackoverflow.com/questions/21420137/black-line-appearing-at-bottom-of-uiwebview-how-to-remove
         webView.backgroundColor = .clear
@@ -185,23 +185,27 @@ import WebKit
         
         if let filePath = Bundle(for: RichEditorView.self).path(forResource: "rich_editor", ofType: "html") {
             let url = URL(fileURLWithPath: filePath, isDirectory: false)
-            let request = URLRequest(url: url)
+            
             if #available(iOS 9.0, *) {
-                webView.loadFileURL(url, allowingReadAccessTo: URL(fileURLWithPath: Bundle.main.bundleURL.absoluteString))
+                let cacheDirectoryURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+                webView.loadFileURL(url, allowingReadAccessTo: cacheDirectoryURL)
             } else {
                 // Fallback on earlier versions
+                
             }
+            let request = URLRequest(url: url)
+            webView.load(request)
         }
-
+        
         tapRecognizer.addTarget(self, action: #selector(viewWasTapped))
         tapRecognizer.delegate = self
         addGestureRecognizer(tapRecognizer)
     }
-
+    
     // MARK: - Rich Text Editing
-
+    
     // MARK: Properties
-
+    
     /// The HTML that is currently loaded in the editor view, if it is loaded. If it has not been loaded yet, it is the
     /// HTML that will be loaded into the editor view once it finishes initializing.
     public var html: String = String() {
@@ -215,7 +219,7 @@ import WebKit
         }
     }
     
-    func getHtml(onCompletion:@escaping((String, Error?)-> Void)) {
+    public func getHtml(onCompletion:@escaping((String, Error?)-> Void)) {
         runJSX("RE.getHtml();") { (response:String, error: Error?) in
             guard error == nil else {
                 onCompletion(String(), error)
@@ -224,12 +228,12 @@ import WebKit
             onCompletion(response, nil)
         }
     }
-
+    
     /// Text representation of the data that has been input into the editor view, if it has been loaded.
     public var text: String {
         return runJS("RE.getText()")
     }
-
+    
     /// Private variable that holds the placeholder text, so you can set the placeholder before the editor loads.
     private var placeholderText: String = ""
     /// The placeholder text that should be shown when there is no user input.
@@ -240,8 +244,8 @@ import WebKit
             runJS("RE.setPlaceholderText('\(newValue.escaped)');")
         }
     }
-
-
+    
+    
     /// The href of the current selection, if the current selection's parent is an anchor tag.
     /// Will be nil if there is no href, or it is an empty string.
     public var selectedHref: String? {
@@ -253,19 +257,19 @@ import WebKit
             return href
         }
     }
-
+    
     /// Whether or not the selection has a type specifically of "Range".
     public var hasRangeSelection: Bool {
         return runJS("RE.rangeSelectionExists();") == "true" ? true : false
     }
-
+    
     /// Whether or not the selection has a type specifically of "Range" or "Caret".
     public var hasRangeOrCaretSelection: Bool {
         return runJS("RE.rangeOrCaretSelectionExists();") == "true" ? true : false
     }
-
+    
     // MARK: Methods
-
+    
     public func removeFormat() {
         runJS("RE.removeFormat();")
     }
@@ -324,23 +328,23 @@ import WebKit
     public func header(_ h: Int) {
         runJS("RE.setHeading('\(h)');")
     }
-
+    
     public func indent() {
         runJS("RE.setIndent();")
     }
-
+    
     public func outdent() {
         runJS("RE.setOutdent();")
     }
-
+    
     public func orderedList() {
         runJS("RE.setOrderedList();")
     }
-
+    
     public func unorderedList() {
         runJS("RE.setUnorderedList();")
     }
-
+    
     public func blockquote() {
         runJS("RE.setBlockquote()");
     }
@@ -370,7 +374,7 @@ import WebKit
     public func focus() {
         runJS("RE.focus();")
     }
-
+    
     public func focus(at: CGPoint) {
         runJS("RE.focusAtPoint(\(at.x), \(at.y));")
     }
@@ -378,7 +382,7 @@ import WebKit
     public func blur() {
         runJS("RE.blurFocus()")
     }
-
+    
     /// Runs some JavaScript on the UIWebView and returns the result
     /// If there is no result, returns an empty string
     /// - parameter js: The JavaScript string to be run
@@ -392,7 +396,7 @@ import WebKit
         }
         return String()
     }
-
+    
     public func runJSX(_ js: String, onCompletion: @escaping (String, Error?) -> Void) {
         webView.evaluateJavaScript(js, completionHandler: { (response: Any?, error: Error?) in
             if let stringResponse = response as? String {
@@ -402,25 +406,25 @@ import WebKit
             }
         })
     }
-
-
+    
+    
     // MARK: - Delegate Methods
-
-
+    
+    
     // MARK: UIScrollViewDelegate
-
+    
     public func scrollViewDidScroll(_ scrollView: UIScrollView) {
         // We use this to keep the scroll view from changing its offset when the keyboard comes up
         if !isScrollEnabled {
             scrollView.bounds = webView.bounds
         }
     }
-
-
+    
+    
     // MARK: UIWebViewDelegate
-
+    
     public func webView(_ webView: UIWebView, shouldStartLoadWith request: URLRequest, navigationType: UIWebViewNavigationType) -> Bool {
-
+        
         // Handle pre-defined editor actions
         let callbackPrefix = "re-callback://"
         if request.url?.absoluteString.hasPrefix(callbackPrefix) == true {
@@ -428,7 +432,7 @@ import WebKit
             // When we get a callback, we need to fetch the command queue to run the commands
             // It comes in as a JSON array of commands that we need to parse
             let commands = runJS("RE.getCommandQueue();")
-
+            
             if let data = commands.data(using: .utf8) {
                 
                 let jsonCommands: [String]
@@ -438,10 +442,10 @@ import WebKit
                     jsonCommands = []
                     NSLog("RichEditorView: Failed to parse JSON Commands")
                 }
-
+                
                 jsonCommands.forEach(performCommand)
             }
-
+            
             return false
         }
         
@@ -457,19 +461,19 @@ import WebKit
         
         return true
     }
-
-
+    
+    
     // MARK: UIGestureRecognizerDelegate
-
+    
     /// Delegate method for our UITapGestureDelegate.
     /// Since the internal web view also has gesture recognizers, we have to make sure that we actually receive our taps.
     public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
         return true
     }
-
-
+    
+    
     // MARK: - Private Implementation Details
-
+    
     private var isContentEditable: Bool {
         get {
             if isEditorLoaded {
@@ -496,7 +500,7 @@ import WebKit
         let string = runJS("RE.getRelativeCaretYPosition();")
         return Int(string) ?? 0
     }
-
+    
     private func updateHeight() {
         runJSX("document.getElementById('editor').clientHeight;") { (heightString, error: Error?) in
             guard error == nil else {return}
@@ -506,7 +510,7 @@ import WebKit
             }
         }
     }
-
+    
     /// Scrolls the editor to a position where the caret is visible.
     /// Called repeatedly to make sure the caret is always visible when inputting text.
     /// Works only if the `lineHeight` of the editor is available.
@@ -571,7 +575,7 @@ import WebKit
                 sSelf.contentHTML = content
                 sSelf.updateHeight()
             }
-           
+            
         }
         else if method.hasPrefix("updateHeight") {
             updateHeight()
@@ -595,10 +599,10 @@ import WebKit
                 let action = method.replacingCharacters(in: range, with: "")
                 self.delegate?.richEditor?(self, handle: action)
             }
-           
+            
         }
     }
-
+    
     /// Called by the UITapGestureRecognizer when the user taps the view.
     /// If we are not already the first responder, focus the editor.
     @objc private func viewWasTapped() {
@@ -652,13 +656,13 @@ extension RichEditorView: WKNavigationDelegate {
             decisionHandler(.allow)
             if let url = navigationAction.request.url,
                 let shouldInteract = delegate?.richEditor?(self, shouldInteractWith: url)
-            {                
+            {
                 return
             }
         }
         decisionHandler(.allow)
     }
-
+    
 }
 
 
