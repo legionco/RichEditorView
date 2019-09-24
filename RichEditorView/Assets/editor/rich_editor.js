@@ -75,33 +75,6 @@ RE.getClientHeight = function() {
     return RE.editor.clientHeight.toString();
 }
 
-RE.runInitScript = function() {
-    document.getElementById("editor").style.font = "12px Mallory-Book";
-    document.getElementById("editor").style.color = "#53585f";
-    var cssString = "img{ max-width:250px; border-radius: 200xp }"
-    var style = document.createElement('style'); style.innerHTML = cssString; document.head.appendChild(style);
-    cssString = ".file-attachment{width: 120px; height: 80px; text-decoration: none; color: #53585f; border: solid #E5E5EA; border-width: 1px; border-radius: 10px; background-color: #F5F5F9; font-size: 0.875em; padding: 10px; word-wrap: break-word; position: relative; margin-bottom: 2px; margin-top: 10px; margin-right: 10px;}.inline-attachment{display: inline-block; float: none; text-align: center;}.regular-attachment{display: block; float: left;}.tap-to-download{display: block; position: absolute; left: 0; width: 100%;}#tap-top-text{top: 10px;}#tap-image{top: 35px; height: 30px;}#tap-bottom-text{top: 70px; height: 20px;}#download-file-small-container{position: absolute; bottom: 0; width: 100px; height: 30px;}#download-file-small-image{width: 16px; height: 20px;}#download-file-small-text{padding-left: 5px; position: relative; top: -4px;}.center{display: block; margin-left: auto; margin-right: auto; height: 30px;}.loader { border: 10px solid #f3f3f3; border-radius: 50%; border-top: 10px solid #3498db; width: 20px; height: 20px; margin: auto; position: relative; top: 20px; -webkit-animation: spin 2s linear infinite; animation: spin 2s linear infinite; } @-webkit-keyframes spin { 0% { -webkit-transform: rotate(0deg); } 100% { -webkit-transform: rotate(360deg); } } @keyframes spin {  0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }"
-    var style = document.createElement('style');
-    style.innerHTML = cssString;
-    document.head.appendChild(style);
-    
-    function showThumbnail(self) {
-        var str = '<a href="' + self.href + '" target="_blank" class="file-attachment inline-attachment"><div class="loader"></div></a>';
-        var Obj = document.getElementById(self.id);
-        if(Obj.outerHTML) {
-            Obj.outerHTML=str;
-        } else {
-            var tmpObj=document.createElement("div");
-            tmpObj.innerHTML='<!--THIS DATA SHOULD BE REPLACED-->';
-            ObjParent=Obj.parentNode; ObjParent.replaceChild(tmpObj,Obj);
-            ObjParent.innerHTML=ObjParent.innerHTML.replace('<div><!--THIS DATA SHOULD BE REPLACED--></div>',str);
-            
-        }
-        return false;
-        
-    }
-}
-
 RE.callbackQueue = [];
 RE.runCallbackQueue = function() {
     if (RE.callbackQueue.length === 0) {
@@ -261,10 +234,10 @@ RE.setLineHeight = function(height) {
 
 RE.insertImage = function(url, alt) {
     var img = document.createElement('img');
-    img.setAttribute("width", "150");
-    img.setAttribute("height", "150");
     img.setAttribute("src", url);
     img.setAttribute("alt", alt);
+    img.setAttribute("width", "150");
+    img.setAttribute("height", "150");
     img.onload = RE.updateHeight;
     
     RE.insertHTML(img.outerHTML);

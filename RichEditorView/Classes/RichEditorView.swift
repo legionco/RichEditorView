@@ -514,11 +514,6 @@ import WebKit
         }
     }
     
-    public func runInitScript() {
-        runJSX("RE.runInitScript()") { (response: String, error: Error?) in
-            
-        }
-    }
     
     /// Scrolls the editor to a position where the caret is visible.
     /// Called repeatedly to make sure the caret is always visible when inputting text.
