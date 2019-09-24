@@ -168,6 +168,7 @@ import WebKit
         //webView.scalesPageToFit = false
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         //webView.dataDetectorTypes = UIDataDetectorTypes()
+        webView.configuration.userContentController.add(self, name:"postascript")
         
         // These to are a fix for a bug where UIWebView would display a black line at the bottom of the view.
         // https://stackoverflow.com/questions/21420137/black-line-appearing-at-bottom-of-uiwebview-how-to-remove
@@ -496,13 +497,15 @@ import WebKit
     /// For example, if the cursor is directly at the top of what is visible, it will return 0.
     /// This also means that it will be negative if it is above what is currently visible.
     /// Can also return 0 if some sort of error occurs between JS and here.
-    private var relativeCaretYPosition: Int {
-        let string = runJS("RE.getRelativeCaretYPosition();")
-        return Int(string) ?? 0
+    private var relativeCaretYPosition: Int = 0
+    func getRelativeCaretYPosition(onCompletion:@escaping((Int, Error?)-> Void)){
+        runJSX("RE.getRelativeCaretYPosition();") { (response: String, error:Error?) in
+            guard error == nil else {onCompletion(0, error); return}
+            onCompletion(Int(response) ?? 0, nil)
+        }
     }
-    
     private func updateHeight() {
-        runJSX("document.getElementById('editor').clientHeight;") { (heightString, error: Error?) in
+        runJSX("RE.getClientHeight()") { (heightString, error: Error?) in
             guard error == nil else {return}
             let height = Int(heightString) ?? 0
             if self.editorHeight != height {
@@ -511,11 +514,18 @@ import WebKit
         }
     }
     
+    public func runInitScript() {
+        runJSX("RE.runInitScript()") { (response: String, error: Error?) in
+            
+        }
+    }
+    
     /// Scrolls the editor to a position where the caret is visible.
     /// Called repeatedly to make sure the caret is always visible when inputting text.
     /// Works only if the `lineHeight` of the editor is available.
     private func scrollCaretToVisible() {
         let scrollView = self.webView.scrollView
+        
         self.getClientHeight { (clientHeight, error: Error?) in
             guard error == nil else {return}
             let contentHeight = clientHeight > 0 ? CGFloat(clientHeight) : scrollView.frame.height
@@ -526,24 +536,30 @@ import WebKit
                 guard error == nil else {return}
                 let lineHeight = CGFloat(_lineHeight)
                 let cursorHeight = lineHeight - 4
-                let visiblePosition = CGFloat(self.relativeCaretYPosition)
-                var offset: CGPoint?
-                
-                if visiblePosition + cursorHeight > scrollView.bounds.size.height {
-                    // Visible caret position goes further than our bounds
-                    offset = CGPoint(x: 0, y: (visiblePosition + lineHeight) - scrollView.bounds.height + scrollView.contentOffset.y)
+                self.getRelativeCaretYPosition(onCompletion: { (caretYPosition: Int, error: Error?) in
+                    guard error == nil else {return}
+                    let visiblePosition = CGFloat(caretYPosition)
+                    var offset: CGPoint?
                     
-                } else if visiblePosition < 0 {
-                    // Visible caret position is above what is currently visible
-                    var amount = scrollView.contentOffset.y + visiblePosition
-                    amount = amount < 0 ? 0 : amount
-                    offset = CGPoint(x: scrollView.contentOffset.x, y: amount)
+                    if visiblePosition + cursorHeight > scrollView.bounds.size.height {
+                        // Visible caret position goes further than our bounds
+                        offset = CGPoint(x: 0, y: (visiblePosition + lineHeight) - scrollView.bounds.height + scrollView.contentOffset.y)
+                        
+                    } else if visiblePosition < 0 {
+                        // Visible caret position is above what is currently visible
+                        var amount = scrollView.contentOffset.y + visiblePosition
+                        amount = amount < 0 ? 0 : amount
+                        offset = CGPoint(x: scrollView.contentOffset.x, y: amount)
+                        
+                    }
                     
-                }
+                    if let offset = offset {
+                        scrollView.setContentOffset(offset, animated: true)
+                    }
+                    let point = CGPoint(x: 0, y: scrollView.contentSize.height - scrollView.bounds.size.height + scrollView.contentInset.bottom)
+                    
+                })
                 
-                if let offset = offset {
-                    scrollView.setContentOffset(offset, animated: true)
-                }
             })
             
         }
@@ -653,10 +669,11 @@ extension RichEditorView: WKNavigationDelegate {
         // User is tapping on a link, so we should react accordingly
         if navigationAction.navigationType == .linkActivated ||
             navigationAction.navigationType == .backForward {
-            decisionHandler(.allow)
+            
             if let url = navigationAction.request.url,
                 let shouldInteract = delegate?.richEditor?(self, shouldInteractWith: url)
             {
+                decisionHandler(.cancel)
                 return
             }
         }
@@ -665,6 +682,11 @@ extension RichEditorView: WKNavigationDelegate {
     
 }
 
+extension RichEditorView: WKScriptMessageHandler {
+    public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        print(message.body)
+    }
+}
 
 /*
  Overwriting the WKWebView for modifying the inputAccessoryView
