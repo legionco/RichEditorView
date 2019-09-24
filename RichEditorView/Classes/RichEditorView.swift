@@ -25,10 +25,10 @@ import WebKit
     @objc optional func richEditorLostFocus(_ editor: RichEditorView)
     
     /// Called when the RichEditorView has become ready to receive input
-    /// More concretely, is called when the internal UIWebView loads for the first time, and contentHTML is set
+    /// More concretely, is called when the internal WKWebView loads for the first time, and contentHTML is set
     @objc optional func richEditorDidLoad(_ editor: RichEditorView)
     
-    /// Called when the internal UIWebView begins loading a URL that it does not know how to respond to
+    /// Called when the internal WKWebView begins loading a URL that it does not know how to respond to
     /// For example, if there is an external link, and then the user taps it
     @objc optional func richEditor(_ editor: RichEditorView, shouldInteractWith url: URL) -> Bool
     
@@ -38,7 +38,7 @@ import WebKit
 }
 
 /// RichEditorView is a UIView that displays richly styled text, and allows it to be edited in a WYSIWYG fashion.
-@objcMembers open class RichEditorView: UIView, UIScrollViewDelegate, UIWebViewDelegate, UIGestureRecognizerDelegate {
+@objcMembers open class RichEditorView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate {
     
     // MARK: Public Properties
     
@@ -53,7 +53,7 @@ import WebKit
         
     }
     
-    /// The internal UIWebView that is used to display the text.
+    /// The internal WKWebView that is used to display the text.
     open private(set) var webView: RichEditorWebView
     
     /// Whether or not scroll is enabled on the view.
@@ -170,7 +170,7 @@ import WebKit
         //webView.dataDetectorTypes = UIDataDetectorTypes()
         webView.configuration.userContentController.add(self, name:"postascript")
         
-        // These to are a fix for a bug where UIWebView would display a black line at the bottom of the view.
+        // These to are a fix for a bug where (old web view) would display a black line at the bottom of the view.
         // https://stackoverflow.com/questions/21420137/black-line-appearing-at-bottom-of-uiwebview-how-to-remove
         webView.backgroundColor = .clear
         webView.isOpaque = false
@@ -384,7 +384,7 @@ import WebKit
         runJS("RE.blurFocus()")
     }
     
-    /// Runs some JavaScript on the UIWebView and returns the result
+    /// Runs some JavaScript on the WKWebView and returns the result
     /// If there is no result, returns an empty string
     /// - parameter js: The JavaScript string to be run
     /// - returns: The result of the JavaScript that was run
@@ -420,49 +420,6 @@ import WebKit
             scrollView.bounds = webView.bounds
         }
     }
-    
-    
-    // MARK: UIWebViewDelegate
-    
-    public func webView(_ webView: UIWebView, shouldStartLoadWith request: URLRequest, navigationType: UIWebViewNavigationType) -> Bool {
-        
-        // Handle pre-defined editor actions
-        let callbackPrefix = "re-callback://"
-        if request.url?.absoluteString.hasPrefix(callbackPrefix) == true {
-            
-            // When we get a callback, we need to fetch the command queue to run the commands
-            // It comes in as a JSON array of commands that we need to parse
-            let commands = runJS("RE.getCommandQueue();")
-            
-            if let data = commands.data(using: .utf8) {
-                
-                let jsonCommands: [String]
-                do {
-                    jsonCommands = try JSONSerialization.jsonObject(with: data) as? [String] ?? []
-                } catch {
-                    jsonCommands = []
-                    NSLog("RichEditorView: Failed to parse JSON Commands")
-                }
-                
-                jsonCommands.forEach(performCommand)
-            }
-            
-            return false
-        }
-        
-        // User is tapping on a link, so we should react accordingly
-        if navigationType == .linkClicked {
-            if let
-                url = request.url,
-                let shouldInteract = delegate?.richEditor?(self, shouldInteractWith: url)
-            {
-                return shouldInteract
-            }
-        }
-        
-        return true
-    }
-    
     
     // MARK: UIGestureRecognizerDelegate
     
