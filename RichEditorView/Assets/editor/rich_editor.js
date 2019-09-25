@@ -225,6 +225,7 @@ RE.setJustifyRight = function() {
 };
 
 RE.getLineHeight = function() {
+    
     return RE.editor.style.lineHeight;
 };
 
@@ -401,6 +402,7 @@ RE.getSelectedHref = function() {
 RE.getRelativeCaretYPosition = function() {
     var y = 0;
     var sel = window.getSelection();
+    
     if (sel.rangeCount) {
         var range = sel.getRangeAt(0);
         var needsWorkAround = (range.startOffset == 0)
@@ -420,3 +422,4 @@ RE.getRelativeCaretYPosition = function() {
     
     return y;
 };
+

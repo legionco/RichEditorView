@@ -16,34 +16,44 @@ import WebKit
     @objc optional func richEditor(_ editor: RichEditorView, heightDidChange height: Int)
     
     /// Called whenever the content inside the view changes
+    
     @objc optional func richEditor(_ editor: RichEditorView, contentDidChange content: String)
     
     /// Called when the rich editor starts editing
+    
     @objc optional func richEditorTookFocus(_ editor: RichEditorView)
     
     /// Called when the rich editor stops editing or loses focus
+    
     @objc optional func richEditorLostFocus(_ editor: RichEditorView)
     
     /// Called when the RichEditorView has become ready to receive input
     /// More concretely, is called when the internal WKWebView loads for the first time, and contentHTML is set
+    
     @objc optional func richEditorDidLoad(_ editor: RichEditorView)
     
     /// Called when the internal WKWebView begins loading a URL that it does not know how to respond to
     /// For example, if there is an external link, and then the user taps it
+    
     @objc optional func richEditor(_ editor: RichEditorView, shouldInteractWith url: URL) -> Bool
     
     /// Called when custom actions are called by callbacks in the JS
     /// By default, this method is not used unless called by some custom JS that you add
+    
     @objc optional func richEditor(_ editor: RichEditorView, handle action: String)
 }
 
 /// RichEditorView is a UIView that displays richly styled text, and allows it to be edited in a WYSIWYG fashion.
-@objcMembers open class RichEditorView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate {
+
+@objcMembers open class RichEditorView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate, WKURLSchemeHandler {
+    
+    
     
     // MARK: Public Properties
     
     /// The delegate that will receive callbacks when certain actions are completed.
     open weak var delegate: RichEditorDelegate?
+    var task: WKURLSchemeTask?
     
     /// Input accessory view to display over they keyboard.
     /// Defaults to nil
@@ -89,22 +99,28 @@ import WebKit
     private var innerLineHeight: Int = 28
     
     /// The line height of the editor. Defaults to 28.
-    open private(set) var lineHeight: Int = 0 {
+    open private(set) var lineHeight: Int = 28 {
         didSet {
             innerLineHeight = lineHeight
-            runJS("RE.setLineHeight('\(innerLineHeight)px');")
+            webView.evaluateJavaScript("RE.setLineHeight('\(innerLineHeight)px');") {  (response: Any?, error: Error?) in
+                if let e = error {
+                    print(e)
+                }
+            }
         }
     }
     
     func getLineHeight(onCompletion:@escaping((Int, Error?)-> Void)) {
         guard isEditorLoaded == true else {return onCompletion(innerLineHeight , nil)}
-        runJSX("RE.getLineHeight();") { (lineHeight, error) in
-            guard error == nil else {
-                onCompletion( 0 , error)
-                return
+        webView.evaluateJavaScript("RE.getLineHeight();", completionHandler: { (response: Any?, error: Error?) in
+            if let intResponse = response as? Int {
+                onCompletion(intResponse, error)
+            } else {
+                onCompletion(self.lineHeight, error)
             }
-            onCompletion(Int(lineHeight) ?? 0 , nil)
-        }
+        })
+        
+        
     }
     
     // MARK: Private Properties
@@ -122,13 +138,13 @@ import WebKit
     /// The inner height of the editor div.
     /// Fetches it from JS every time, so might be slow!
     func getClientHeight(onCompletion:@escaping((Int, Error?)-> Void)) {
-        runJSX("document.body.scrollHeight;") { (height, error) in
-            guard error == nil else {
-                onCompletion( 0 , error)
-                return
+        webView.evaluateJavaScript("document.body.scrollHeight;", completionHandler: { (response: Any?, error: Error?) in
+            if let intResponse = response as? Int {
+                onCompletion(intResponse, error)
+            } else {
+                onCompletion(0, error)
             }
-            onCompletion(Int(height) ?? 0 , nil)
-        }
+        })
     }
     
     
@@ -152,10 +168,12 @@ import WebKit
                 )
             )
         }
+        
+        let schemeHandler = RichEditorSchemeHandler()
+        webConfig.setURLSchemeHandler(schemeHandler, forURLScheme: schemeHandler.kURLScheme)
         webView = RichEditorWebView(frame: CGRect.zero, configuration: webConfig)
-        
-        
         super.init(coder: aDecoder)
+        
         setup()
     }
     
@@ -456,10 +474,13 @@ import WebKit
     /// Can also return 0 if some sort of error occurs between JS and here.
     private var relativeCaretYPosition: Int = 0
     func getRelativeCaretYPosition(onCompletion:@escaping((Int, Error?)-> Void)){
-        runJSX("RE.getRelativeCaretYPosition();") { (response: String, error:Error?) in
-            guard error == nil else {onCompletion(0, error); return}
-            onCompletion(Int(response) ?? 0, nil)
-        }
+        webView.evaluateJavaScript("RE.getRelativeCaretYPosition();", completionHandler: { (response: Any?, error: Error?) in
+            if let stringResponse = response as? Int {
+                onCompletion(stringResponse, error)
+            } else {
+                onCompletion(0, error)
+            }
+        })
     }
     private func updateHeight() {
         runJSX("RE.getClientHeight()") { (heightString, error: Error?) in
@@ -470,7 +491,6 @@ import WebKit
             }
         }
     }
-    
     
     /// Scrolls the editor to a position where the caret is visible.
     /// Called repeatedly to make sure the caret is always visible when inputting text.
@@ -506,14 +526,10 @@ import WebKit
                     }
                     
                     if let offset = offset {
-                        scrollView.setContentOffset(offset, animated: true)
+                        scrollView.setContentOffset(offset, animated: false)
                     }
-                    let point = CGPoint(x: 0, y: scrollView.contentSize.height - scrollView.bounds.size.height + scrollView.contentInset.bottom)
-                    
                 })
-                
             })
-            
         }
         
     }
@@ -585,7 +601,12 @@ import WebKit
 /**
  This is the new delegate
  */
+
 extension RichEditorView: WKNavigationDelegate {
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        print(webView)
+    }
+    
     public func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         let callbackPrefix = "re-callback://"
         if navigationAction.request.url?.absoluteString.hasPrefix(callbackPrefix) == true {
@@ -622,23 +643,62 @@ extension RichEditorView: WKNavigationDelegate {
         if navigationAction.navigationType == .linkActivated ||
             navigationAction.navigationType == .backForward {
             
-            if let url = navigationAction.request.url,
-                let shouldInteract = delegate?.richEditor?(self, shouldInteractWith: url)
-            {
-                decisionHandler(.cancel)
-                return
+            if #available(iOS 11.0, *) {
+                if let url = navigationAction.request.url,
+                    let _ = delegate?.richEditor?(self, shouldInteractWith: url)
+                {
+                    decisionHandler(.cancel)
+                    return
+                }
+            } else {
+                // Fallback on earlier versions
             }
         }
         decisionHandler(.allow)
     }
+    public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        print(navigation)
+    }
+    public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        print(error)
+    }
+    public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        print(error)
+    }
     
+    public func webView(_ webView: WKWebView, didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!) {
+        print(navigation)
+    }
+    
+    public func webView(_ webView: WKWebView, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        print(challenge)
+    }
+    public func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
+        guard let task = task else {return}
+        if let url = urlSchemeTask.request.url, let imageData = try? Data(contentsOf: url), let image = UIImage(data: imageData) {
+            if let dataRep = UIImageJPEGRepresentation(image, 1.0) {
+                task.didReceive(URLResponse(url: task.request.url!, mimeType: "image/jpeg", expectedContentLength: dataRep.count, textEncodingName: nil))
+                task.didReceive(dataRep)
+                task.didFinish()
+            }
+        }
+    }
+    
+    public func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {
+        task = nil
+    }
 }
 
+
+/** TO debug JS script return calls
 extension RichEditorView: WKScriptMessageHandler {
+    
     public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         print(message.body)
     }
+ 
 }
+*/
 
 /*
  Overwriting the WKWebView for modifying the inputAccessoryView
@@ -652,4 +712,36 @@ public class RichEditorWebView: WKWebView {
     }
     
 }
+
+/*
+ RichEditorSchemeHandler class will implement the WKURLSchemeHandler to intercept load request using the kURLScheme.
+ There are problems loading local resources using WKWebView. The scheme (file:///) will have the alias of localhost:///.
+ We have the control of the incomming tasks for that scheme kURLScheme. We can decide the appropiate flow.
+ For now we just let them pass, so they can be injected in the html file.
+ */
+
+class RichEditorSchemeHandler: NSObject, WKURLSchemeHandler {
+    var task: WKURLSchemeTask?
+    var kURLScheme = "localhost"
+    public func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
+        let urlString = urlSchemeTask.request.url?.absoluteString.replacingOccurrences(of: kURLScheme, with: "file") ?? String()
+        let task = urlSchemeTask
+        if let url = URL(string: urlString), let imageData = try? Data(contentsOf: url), let image = UIImage(data: imageData) {
+            if let dataRep = UIImageJPEGRepresentation(image, 1.0) {
+                task.didReceive(URLResponse(url: task.request.url!, mimeType: "image/jpeg", expectedContentLength: dataRep.count, textEncodingName: nil))
+                task.didReceive(dataRep)
+                task.didFinish()
+            }
+        } else if let url = URL(string: urlString), let data = try? Data(contentsOf: url) {
+            task.didReceive(URLResponse(url: task.request.url!, mimeType: nil, expectedContentLength: data.count, textEncodingName: nil))
+            task.didReceive(data)
+            task.didFinish()
+        }
+    }
+    
+    public func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {
+        task = nil
+    }
+}
+
 
