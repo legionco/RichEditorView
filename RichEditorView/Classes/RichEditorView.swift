@@ -186,7 +186,7 @@ import WebKit
         //webView.scalesPageToFit = false
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         //webView.dataDetectorTypes = UIDataDetectorTypes()
-        webView.configuration.userContentController.add(self, name:"postascript")
+        //webView.configuration.userContentController.add(self, name:"postascript")
         
         // These to are a fix for a bug where (old web view) would display a black line at the bottom of the view.
         // https://stackoverflow.com/questions/21420137/black-line-appearing-at-bottom-of-uiwebview-how-to-remove
