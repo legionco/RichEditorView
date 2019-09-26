@@ -186,7 +186,7 @@ import WebKit
         //webView.scalesPageToFit = false
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         //webView.dataDetectorTypes = UIDataDetectorTypes()
-        //webView.configuration.userContentController.add(self, name:"postascript")
+        webView.configuration.userContentController.add(self, name:"postascript")
         
         // These to are a fix for a bug where (old web view) would display a black line at the bottom of the view.
         // https://stackoverflow.com/questions/21420137/black-line-appearing-at-bottom-of-uiwebview-how-to-remove
@@ -481,6 +481,10 @@ import WebKit
                 onCompletion(0, error)
             }
         })
+        //        runJSX("RE.getRelativeCaretYPosition();") { (response: String, error:Error?) in
+        //            guard error == nil else {onCompletion(0, error); return}
+        //            onCompletion(Int(response) ?? 0, nil)
+        //        }
     }
     private func updateHeight() {
         runJSX("RE.getClientHeight()") { (heightString, error: Error?) in
@@ -645,7 +649,7 @@ extension RichEditorView: WKNavigationDelegate {
             
             if #available(iOS 11.0, *) {
                 if let url = navigationAction.request.url,
-                    let _ = delegate?.richEditor?(self, shouldInteractWith: url)
+                    let shouldInteract = delegate?.richEditor?(self, shouldInteractWith: url)
                 {
                     decisionHandler(.cancel)
                     return
@@ -690,15 +694,12 @@ extension RichEditorView: WKNavigationDelegate {
 }
 
 
-/** TO debug JS script return calls
+
 extension RichEditorView: WKScriptMessageHandler {
-    
     public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         print(message.body)
     }
- 
 }
-*/
 
 /*
  Overwriting the WKWebView for modifying the inputAccessoryView
@@ -743,5 +744,6 @@ class RichEditorSchemeHandler: NSObject, WKURLSchemeHandler {
         task = nil
     }
 }
+
 
 
