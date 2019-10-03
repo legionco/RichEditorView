@@ -13,11 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
- "use strict";
+"use strict";
 
 var RE = {};
 
 window.onload = function() {
+    window.webkit.messageHandlers.postascript.postMessage("ready--")
     RE.callback("ready");
 };
 
@@ -70,15 +71,19 @@ RE.updateHeight = function() {
     RE.callback("updateHeight");
 }
 
+RE.getClientHeight = function() {
+    return RE.editor.clientHeight.toString();
+}
+
 RE.callbackQueue = [];
 RE.runCallbackQueue = function() {
     if (RE.callbackQueue.length === 0) {
         return;
     }
-
+    
     setTimeout(function() {
-        window.location.href = "re-callback://";
-    }, 0);
+               window.location.href = "re-callback://";
+               }, 0);
 };
 
 RE.getCommandQueue = function() {
@@ -96,11 +101,11 @@ RE.setHtml = function(contents) {
     var tempWrapper = document.createElement('div');
     tempWrapper.innerHTML = contents;
     var images = tempWrapper.querySelectorAll("img");
-
+    
     for (var i = 0; i < images.length; i++) {
         images[i].onload = RE.updateHeight;
     }
-
+    
     RE.editor.innerHTML = tempWrapper.innerHTML;
     RE.updatePlaceholder();
 };
@@ -220,6 +225,7 @@ RE.setJustifyRight = function() {
 };
 
 RE.getLineHeight = function() {
+    
     return RE.editor.style.lineHeight;
 };
 
@@ -227,12 +233,14 @@ RE.setLineHeight = function(height) {
     RE.editor.style.lineHeight = height;
 };
 
-RE.insertImage = function(url, alt) {
+RE.insertImage = function(url, alt, width, height) {
     var img = document.createElement('img');
     img.setAttribute("src", url);
     img.setAttribute("alt", alt);
+    img.setAttribute("width", width);
+    img.setAttribute("height", height);
     img.onload = RE.updateHeight;
-
+    
     RE.insertHTML(img.outerHTML);
     RE.callback("input");
 };
@@ -251,11 +259,11 @@ RE.insertLink = function(url, title) {
     var sel = document.getSelection();
     if (sel.toString().length !== 0) {
         if (sel.rangeCount) {
-
+            
             var el = document.createElement("a");
             el.setAttribute("href", url);
             el.setAttribute("title", title);
-
+            
             var range = sel.getRangeAt(0).cloneRange();
             range.surroundContents(el);
             sel.removeAllRanges();
@@ -330,8 +338,8 @@ RE.blurFocus = function() {
 };
 
 /**
-Recursively search element ancestors to find a element nodeName e.g. A
-**/
+ Recursively search element ancestors to find a element nodeName e.g. A
+ **/
 var _findNodeByNameInContainer = function(element, nodeName, rootElementId) {
     if (element.nodeName == nodeName) {
         return element;
@@ -349,7 +357,7 @@ var isAnchorNode = function(node) {
 
 RE.getAnchorTagsInNode = function(node) {
     var links = [];
-
+    
     while (node.nextSibling !== null && node.nextSibling !== undefined) {
         node = node.nextSibling;
         if (isAnchorNode(node)) {
@@ -374,7 +382,7 @@ RE.getSelectedHref = function() {
     if (!RE.rangeOrCaretSelectionExists()) {
         return null;
     }
-
+    
     var tags = RE.getAnchorTagsInNode(sel.anchorNode);
     //if more than one link is there, return null
     if (tags.length > 1) {
@@ -385,7 +393,7 @@ RE.getSelectedHref = function() {
         var node = _findNodeByNameInContainer(sel.anchorNode.parentElement, 'A', 'editor');
         href = node.href;
     }
-
+    
     return href ? href : null;
 };
 
@@ -394,6 +402,7 @@ RE.getSelectedHref = function() {
 RE.getRelativeCaretYPosition = function() {
     var y = 0;
     var sel = window.getSelection();
+    
     if (sel.rangeCount) {
         var range = sel.getRangeAt(0);
         var needsWorkAround = (range.startOffset == 0)
@@ -410,6 +419,7 @@ RE.getRelativeCaretYPosition = function() {
             }
         }
     }
-
+    
     return y;
 };
+
