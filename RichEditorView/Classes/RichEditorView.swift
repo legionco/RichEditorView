@@ -380,9 +380,9 @@ import WebKit
         runJS("RE.setJustifyRight();")
     }
     
-    public func insertImage(_ url: String, alt: String) {
+    public func insertImage(_ url: String, alt: String, width:Int = 150, height:Int = 150) {
         runJS("RE.prepareInsert();")
-        runJS("RE.insertImage('\(url.escaped)', '\(alt.escaped)');")
+        runJS("RE.insertImage('\(url.escaped)', '\(alt.escaped)', \(width), \(height));")
     }
     
     public func insertLink(_ href: String, title: String) {
@@ -402,10 +402,12 @@ import WebKit
         runJS("RE.blurFocus()")
     }
     
-    /// Runs some JavaScript on the WKWebView and returns the result
-    /// If there is no result, returns an empty string
+    /// Runs some JavaScript on the WKWebView. It will always return an empty string
+    /// Can be used to run a JS fragment without expecting a result.
+    /// If a result is need it, then runJSX will return a result on the completionHandler
+    /// as long as the conversion from JS to Swift is supported (for example num will return as Int...)
     /// - parameter js: The JavaScript string to be run
-    /// - returns: The result of the JavaScript that was run
+    /// - returns: Empty string
     @discardableResult
     public func runJS(_ js: String) -> String {
         webView.evaluateJavaScript(js) {  (response: Any?, error: Error?) in
@@ -481,10 +483,6 @@ import WebKit
                 onCompletion(0, error)
             }
         })
-        //        runJSX("RE.getRelativeCaretYPosition();") { (response: String, error:Error?) in
-        //            guard error == nil else {onCompletion(0, error); return}
-        //            onCompletion(Int(response) ?? 0, nil)
-        //        }
     }
     private func updateHeight() {
         runJSX("RE.getClientHeight()") { (heightString, error: Error?) in
