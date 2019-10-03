@@ -26,8 +26,8 @@ RE.editor = document.getElementById('editor');
 
 // Not universally supported, but seems to work in iOS 7 and 8
 document.addEventListener("selectionchange", function() {
-                          RE.backuprange();
-                          });
+    RE.backuprange();
+});
 
 //looks specifically for a Range selection and not a Caret selection
 RE.rangeSelectionExists = function() {
@@ -49,19 +49,19 @@ RE.rangeOrCaretSelectionExists = function() {
 };
 
 RE.editor.addEventListener("input", function() {
-                           RE.updatePlaceholder();
-                           RE.backuprange();
-                           RE.callback("input");
-                           });
+    RE.updatePlaceholder();
+    RE.backuprange();
+    RE.callback("input");
+});
 
 RE.editor.addEventListener("focus", function() {
-                           RE.backuprange();
-                           RE.callback("focus");
-                           });
+    RE.backuprange();
+    RE.callback("focus");
+});
 
 RE.editor.addEventListener("blur", function() {
-                           RE.callback("blur");
-                           });
+    RE.callback("blur");
+});
 
 RE.customAction = function(action) {
     RE.callback("action/" + action);

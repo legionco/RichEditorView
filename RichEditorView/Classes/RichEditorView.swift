@@ -103,9 +103,7 @@ import WebKit
         didSet {
             innerLineHeight = lineHeight
             webView.evaluateJavaScript("RE.setLineHeight('\(innerLineHeight)px');") {  (response: Any?, error: Error?) in
-                if let e = error {
-                    print(e)
-                }
+                
             }
         }
     }
@@ -411,9 +409,7 @@ import WebKit
     @discardableResult
     public func runJS(_ js: String) -> String {
         webView.evaluateJavaScript(js) {  (response: Any?, error: Error?) in
-            if let e = error {
-                print(e)
-            }
+            
         }
         return String()
     }
