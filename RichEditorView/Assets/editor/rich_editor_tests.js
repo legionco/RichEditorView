@@ -27,11 +27,6 @@ var RichEditorTests = function() {
         RE.setHtml(content);
     };
 
-    tests['testGetSet'] = function() {
-        var testContent = "Test";
-        RE.setHtml(testContent);
-        Assert.equals(RE.getHtml(), testContent, 'testGetSet');
-    };
 
     tests['testGetSelectedHrefReturnsLinkOnFullSelection'] = function() {
         let htmlWithLink = "<a id='link_id' href='" + link + "'>Foo</a>";
