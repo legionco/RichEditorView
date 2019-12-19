@@ -674,7 +674,7 @@ extension RichEditorView: WKNavigationDelegate {
     public func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
         guard let task = task else {return}
         if let url = urlSchemeTask.request.url, let imageData = try? Data(contentsOf: url), let image = UIImage(data: imageData) {
-            if let dataRep = UIImageJPEGRepresentation(image, 1.0) {
+            if let dataRep = image.jpegData(compressionQuality: 1.0) {
                 task.didReceive(URLResponse(url: task.request.url!, mimeType: "image/jpeg", expectedContentLength: dataRep.count, textEncodingName: nil))
                 task.didReceive(dataRep)
                 task.didFinish()
@@ -722,7 +722,7 @@ class RichEditorSchemeHandler: NSObject, WKURLSchemeHandler {
         let urlString = urlSchemeTask.request.url?.absoluteString.replacingOccurrences(of: kURLScheme, with: "file") ?? String()
         let task = urlSchemeTask
         if let url = URL(string: urlString), let imageData = try? Data(contentsOf: url), let image = UIImage(data: imageData) {
-            if let dataRep = UIImageJPEGRepresentation(image, 1.0) {
+            if let dataRep = image.jpegData(compressionQuality: 1.0) {
                 task.didReceive(URLResponse(url: task.request.url!, mimeType: "image/jpeg", expectedContentLength: dataRep.count, textEncodingName: nil))
                 task.didReceive(dataRep)
                 task.didFinish()
