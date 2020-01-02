@@ -601,7 +601,7 @@ import WebKit
  */
 
 extension RichEditorView: WKNavigationDelegate {
-    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+    public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         print(webView)
     }
     
