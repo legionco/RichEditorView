@@ -205,7 +205,7 @@ import WebKit
             
             if #available(iOS 9.0, *) {
                 let cacheDirectoryURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-                webView.loadFileURL(url, allowingReadAccessTo: cacheDirectoryURL)
+                webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
             } else {
                 // Fallback on earlier versions
                 
