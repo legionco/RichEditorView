@@ -670,7 +670,9 @@ extension RichEditorView: WKNavigationDelegate {
     
     public func webView(_ webView: WKWebView, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
         print(challenge)
+        completionHandler(.useCredential, nil)
     }
+    
     public func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
         guard let task = task else {return}
         if let url = urlSchemeTask.request.url, let imageData = try? Data(contentsOf: url), let image = UIImage(data: imageData) {
